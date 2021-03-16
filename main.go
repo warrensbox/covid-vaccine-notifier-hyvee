@@ -8,9 +8,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sns"
@@ -20,13 +22,13 @@ var (
 	TopicArn   string  = "arn:aws:sns:us-east-1:12334567:Covid-vaccine" //change default
 	Latitude   float64 = 41.6698982
 	Longitude  float64 = -91.5983959
-	Radius     int     = 60
+	Radius     int     = 20
 	AWS_region string  = "us-east-1"
 )
 
 func main() {
-	//lambda.Start(HandleRequest) //*IMPORTANT* comment out for local testing
-	getVaccine() //*IMPORTANT*  uncomment for local testing
+	lambda.Start(HandleRequest) //*IMPORTANT* comment out for local testing
+	//getVaccine() //*IMPORTANT*  uncomment for local testing
 }
 
 //HandleRequest : lambda execution
@@ -39,7 +41,7 @@ func getVaccine() (string, error) {
 
 	rb := JSONBODY{}
 	rb.Operationname = "SearchPharmaciesNearPointWithCovidVaccineAvailability"
-	rb.Variables.Radius = Radius
+	rb.Variables.Radius = getEnvRadius()
 	rb.Variables.Latitude = Latitude
 	rb.Variables.Longitude = Longitude
 	rb.Query = "query SearchPharmaciesNearPointWithCovidVaccineAvailability($latitude: Float!, $longitude: Float!, $radius: Int! = 10) {\n  searchPharmaciesNearPoint(latitude: $latitude, longitude: $longitude, radius: $radius) { distance location {   locationId   name   nickname   phoneNumber   businessCode   isCovidVaccineAvailable   covidVaccineEligibilityTerms   address {     line1     line2     city     state     zip     latitude     longitude     __typename   }   __typename } __typename  }}"
@@ -172,6 +174,18 @@ func getEnvTopic() string {
 		return TopicArn
 	}
 	return v
+}
+
+func getEnvRadius() int {
+	v := os.Getenv("RADIUS")
+	if v == "" {
+		return Radius
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		return 0
+	}
+	return i
 }
 
 type re []struct {
