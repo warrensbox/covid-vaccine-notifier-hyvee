@@ -22,13 +22,13 @@ var (
 	TopicArn   string  = "arn:aws:sns:us-east-1:12334567:Covid-vaccine" //change default
 	Latitude   float64 = 41.6698982
 	Longitude  float64 = -91.5983959
-	Radius     int     = 20
+	Radius     int     = 100
 	AWS_region string  = "us-east-1"
 )
 
 func main() {
-	lambda.Start(HandleRequest) //*IMPORTANT* comment out for local testing
-	//getVaccine() //*IMPORTANT*  uncomment for local testing
+	lambda.Start(HandleRequest) //*IMPORTANT* comment/remove for local testing
+	//getVaccine()              //*IMPORTANT*  uncomment for local testing
 }
 
 //HandleRequest : lambda execution
