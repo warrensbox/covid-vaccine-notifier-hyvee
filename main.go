@@ -98,7 +98,7 @@ func getVaccine() (string, error) {
 		// fmt.Printf("Covid Vaccine Eligibility Terms: %s\n", val.Location.Covidvaccineeligibilityterms)
 		// fmt.Println()
 
-		if !val.Location.Iscovidvaccineavailable {
+		if val.Location.Iscovidvaccineavailable {
 			available = append(available, val)
 		}
 	}
