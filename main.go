@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -15,6 +17,8 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/sns"
 )
 
@@ -22,10 +26,12 @@ var (
 	TopicArn   string  = "arn:aws:sns:us-east-1:12334567:Covid-vaccine" //change default
 	Latitude   float64 = 41.6698982
 	Longitude  float64 = -91.5983959
-	Radius     int     = 100
+	Radius     int     = 200
 	AWS_region string  = "us-east-1"
 	State      string  = "IA"
 )
+
+var fnvHash hash.Hash32 = fnv.New32a()
 
 func main() {
 	lambda.Start(HandleRequest) //*IMPORTANT* comment/remove for local testing
@@ -118,14 +124,41 @@ func getVaccine() (string, error) {
 			fmt.Printf("Covid Vaccine Eligibility Terms: %s\n", val.Location.Covidvaccineeligibilityterms)
 			fmt.Println()
 		}
-		return sendMessage(available)
+		message := composeMessage(available)
+		fmt.Println(message)
+		hash := getHash(message)
+		fmt.Println(hash)
+		if updateDatabase(hash) {
+			return sendMessage(message)
+		}
 	}
 
 	return "Nothing to do", nil
 
 }
 
-func sendMessage(available re) (string, error) {
+func composeMessage(available re) string {
+	//compose message
+	var resultStr strings.Builder
+	resultStr.WriteString("Vaccination available at:\n")
+	for _, val := range available {
+		location := fmt.Sprintf("Location: %s\n", val.Location.Name)
+		resultStr.WriteString(location)
+		hyveeSignUp := fmt.Sprintf("URL: %s\n", "https://www.hy-vee.com/my-pharmacy/covid-vaccine-consent\n")
+		resultStr.WriteString(hyveeSignUp)
+		phonenumber := fmt.Sprintf("Phone: %s\n", val.Location.Phonenumber)
+		resultStr.WriteString(phonenumber)
+		address := fmt.Sprintf("Address: %s, %s, %s, %s\n", val.Location.Address.Line1, val.Location.Address.City, val.Location.Address.State, val.Location.Address.Zip)
+		resultStr.WriteString(address)
+		eligibility := fmt.Sprintf("Covid Vaccine Eligibility Terms: %s\n", val.Location.Covidvaccineeligibilityterms)
+		resultStr.WriteString(eligibility)
+		resultStr.WriteString("- - -\n")
+	}
+
+	return resultStr.String()
+}
+
+func sendMessage(message string) (string, error) {
 
 	sess, err := session.NewSession(&aws.Config{
 		Region: aws.String(AWS_region),
@@ -136,27 +169,9 @@ func sendMessage(available re) (string, error) {
 		return "Unable to create session", err
 	}
 
-	//compose message
-	var resultStr strings.Builder
-	resultStr.WriteString("Vaccination available at:\n")
-	for _, val := range available {
-		location := fmt.Sprintf("Location: %s\n", val.Location.Name)
-		resultStr.WriteString(location)
-		phonenumber := fmt.Sprintf("Phone: %s\n", val.Location.Phonenumber)
-		resultStr.WriteString(phonenumber)
-		address := fmt.Sprintf("Address: %s, %s, %s, %s\n", val.Location.Address.Line1, val.Location.Address.City, val.Location.Address.State, val.Location.Address.Zip)
-		resultStr.WriteString(address)
-		eligibility := fmt.Sprintf("Covid Vaccine Eligibility Terms: %s\n", val.Location.Covidvaccineeligibilityterms)
-		resultStr.WriteString(eligibility)
-		resultStr.WriteString("- - -\n")
-	}
-
-	hyveeSignUp := "https://www.hy-vee.com/my-pharmacy/covid-vaccine-consent\n"
-	resultStr.WriteString(hyveeSignUp)
-
 	client := sns.New(sess)
 	input := &sns.PublishInput{
-		Message:  aws.String(resultStr.String()),
+		Message:  aws.String(message),
 		TopicArn: aws.String(getEnvTopic()),
 	}
 
@@ -169,6 +184,100 @@ func sendMessage(available re) (string, error) {
 	fmt.Println(result)
 	output := fmt.Sprintf("%s", result)
 	return output, nil
+}
+
+func updateDatabase(hash string) bool {
+
+	sess, errSession := session.NewSession(&aws.Config{
+		Region: aws.String(AWS_region),
+	})
+
+	if errSession != nil {
+		fmt.Println("NewSession error:", errSession)
+		return false
+	}
+	// Create DynamoDB client
+	svc := dynamodb.New(sess)
+
+	// Update item in table Covid
+	tableName := "Covid"
+	source := "covid-hyvee-only"
+	id := "2020"
+
+	result, err := svc.GetItem(&dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"Source": {
+				S: aws.String(source),
+			},
+			"ID": {
+				N: aws.String(id),
+			},
+		},
+	})
+
+	if err != nil {
+		fmt.Println(err.Error())
+		return false
+	}
+
+	if result.Item == nil {
+		fmt.Println("Could not find item..continue")
+	}
+	item := Covid{}
+
+	err = dynamodbattribute.UnmarshalMap(result.Item, &item)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to unmarshal Record, %v", err))
+	}
+
+	if result != nil {
+		fmt.Println("Found item:")
+		fmt.Println("Source:  ", item.Source)
+		fmt.Println("fingerprint: ", item.Fingerprint)
+		fmt.Println("ID:", item.ID)
+		fmt.Println("hash: ", hash)
+	}
+
+	if item.Fingerprint == hash {
+		fmt.Println("No need to update since nothing changed")
+		return false
+	} else {
+		input := &dynamodb.UpdateItemInput{
+			ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+				":f": {
+					S: aws.String(hash),
+				},
+			},
+			TableName: aws.String(tableName),
+			Key: map[string]*dynamodb.AttributeValue{
+				"ID": {
+					N: aws.String(id),
+				},
+				"Source": {
+					S: aws.String(source),
+				},
+			},
+			ReturnValues:     aws.String("UPDATED_NEW"),
+			UpdateExpression: aws.String("set Fingerprint = :f"),
+		}
+
+		_, err2 := svc.UpdateItem(input)
+		if err2 != nil {
+			fmt.Println(err2.Error())
+			return false
+		}
+
+		fmt.Println("Successfully updated dynamo")
+		return true
+	}
+}
+
+func getHash(s string) string {
+	fnvHash.Write([]byte(s))
+	defer fnvHash.Reset()
+
+	return fmt.Sprintf("%x", fnvHash.Sum(nil))
 }
 
 func getEnvState() string {
@@ -272,4 +381,10 @@ type JSONBODY struct {
 		Longitude float64 `json:"longitude"`
 	} `json:"variables"`
 	Query string `json:"query"`
+}
+
+type Covid struct {
+	ID          int
+	Source      string
+	Fingerprint string
 }
