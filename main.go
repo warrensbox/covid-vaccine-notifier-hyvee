@@ -24,11 +24,12 @@ var (
 	Longitude  float64 = -91.5983959
 	Radius     int     = 100
 	AWS_region string  = "us-east-1"
+	State      string  = "IA"
 )
 
 func main() {
 	lambda.Start(HandleRequest) //*IMPORTANT* comment/remove for local testing
-	//getVaccine()              //*IMPORTANT*  uncomment for local testing
+	//getVaccine() //*IMPORTANT*  uncomment for local testing
 }
 
 //HandleRequest : lambda execution
@@ -39,6 +40,7 @@ func HandleRequest(ctx context.Context) (string, error) {
 
 func getVaccine() (string, error) {
 
+	STATE := getEnvState()
 	rb := JSONBODY{}
 	rb.Operationname = "SearchPharmaciesNearPointWithCovidVaccineAvailability"
 	rb.Variables.Radius = getEnvRadius()
@@ -48,6 +50,7 @@ func getVaccine() (string, error) {
 	fmt.Printf("RADIUS: %v\n", rb.Variables.Radius)
 	fmt.Printf("LATITUDE: %v\n", rb.Variables.Latitude)
 	fmt.Printf("LONGTITUDE: %v\n", rb.Variables.Longitude)
+	fmt.Printf("STATE: %v\n", getEnvState())
 	requestBody, err := json.Marshal(rb)
 
 	if err != nil {
@@ -100,7 +103,7 @@ func getVaccine() (string, error) {
 		// fmt.Printf("Covid Vaccine Eligibility Terms: %s\n", val.Location.Covidvaccineeligibilityterms)
 		// fmt.Println()
 
-		if val.Location.Iscovidvaccineavailable {
+		if val.Location.Iscovidvaccineavailable && val.Location.Address.State == STATE {
 			available = append(available, val)
 		}
 	}
@@ -166,6 +169,14 @@ func sendMessage(available re) (string, error) {
 	fmt.Println(result)
 	output := fmt.Sprintf("%s", result)
 	return output, nil
+}
+
+func getEnvState() string {
+	v := os.Getenv("STATE")
+	if v == "" {
+		return State
+	}
+	return v
 }
 
 func getEnvTopic() string {
