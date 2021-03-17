@@ -144,7 +144,7 @@ func composeMessage(available re) string {
 	for _, val := range available {
 		location := fmt.Sprintf("Location: %s\n", val.Location.Name)
 		resultStr.WriteString(location)
-		hyveeSignUp := fmt.Sprintf("URL: %s\n", "https://www.hy-vee.com/my-pharmacy/covid-vaccine-consent\n")
+		hyveeSignUp := fmt.Sprintf("URL: %s\n", "https://www.hy-vee.com/my-pharmacy/covid-vaccine-consent")
 		resultStr.WriteString(hyveeSignUp)
 		phonenumber := fmt.Sprintf("Phone: %s\n", val.Location.Phonenumber)
 		resultStr.WriteString(phonenumber)
