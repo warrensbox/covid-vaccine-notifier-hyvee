@@ -141,6 +141,7 @@ func composeMessage(available re) string {
 	//compose message
 	var resultStr strings.Builder
 	resultStr.WriteString("Vaccination available at:\n")
+	resultStr.WriteString("HyVee locations only:\n")
 	for _, val := range available {
 		location := fmt.Sprintf("Location: %s\n", val.Location.Name)
 		resultStr.WriteString(location)
