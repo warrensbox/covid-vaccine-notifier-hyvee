@@ -1,4 +1,4 @@
-# HyVee only vacinne notifier
+# HyVee ONLY vacinne notifier
 A lightweight application (lambda function) that notifies you when a vaccine appointment becomes available near you. Get notified on: 
 - Slack
 - Teams
