@@ -15,3 +15,7 @@ Install the binary as a AWS lambda function or simply run it on your machine.
 1. With the returned payload from the API, we will check against DynamoDB if the alert has been sent before. If it's the same as the previous alert, the function does nothing.
 1. If the alert is new and is different than the previous alert, the function will trigger the SNS Topic.
 1. All resources subscribing to the SNS topic will receive the alert.   
+
+
+# Environment Variables
+
